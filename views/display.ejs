@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Price Alert</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+    <!-- <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet"> -->
+</head>
+ <body>
+    
+<header class="jumbotron">
+    <div class="container"><!-- for keeping the contents of jumbotron aligned properly -->
+    <h1>Welcome To Price Alerts!!</h1>
+    <p>Get intimation of price changes instantly </p>
+</header>
+
+<div class="row" style="display:flex;flex-wrap:wrap; justify-content:space-between">
+    <div col-md-4>Date</div>
+    <div col-md-4>Time</div>
+    <div col-md-4>Price</div>
+</div>
+<div class="row" >    
+        <div class="col-md-4" id='currDate'>
+          <%= date %>
+        </div>    
+        <div class="col-md-4" id='currTime'>
+          <%= time %>
+        </div>
+        <div class="col-md-4" id='currPrice'>
+          <%= price %>
+        </div>    
+            
+</div>
+
+
+ </body>
+</html>
+
+   
+
