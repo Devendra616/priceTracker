@@ -15,7 +15,7 @@ puppeteer.launch({ headless: true }).then(async browser => {
   const page = await browser.newPage()
   await page.setViewport({ width: 800, height: 600 })
   await page.goto('https://www.udemy.com/the-web-developer-bootcamp/')
-  await page.waitFor(5000)
+  await page.waitFor(5000);
   await page.screenshot({ path: 'testresult.png', fullPage: true })
   await page.waitForSelector('.course-price-text > span + span > span');
   const price = await page.$eval('.course-price-text > span + span > span', e => e.innerText);
