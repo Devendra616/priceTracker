@@ -6,8 +6,8 @@ const pluginStealth = require('puppeteer-extra-plugin-stealth');
 const bodyParser = require("body-parser");
 const {TimeoutError} = require('puppeteer/Errors');
 const nodeMailer = require('nodemailer');
-
 const port= process.env.PORT|| 3000;
+const EmailTemplate = require('email-templates').EmailTemplate;
 var app = express();
 
 app.set('view engine','ejs');
@@ -27,8 +27,8 @@ let transporter = nodeMailer.createTransport({
 });
 
 let mailOptions = {
-    from: `Devendra" <${process.env.MAILID}>`, // sender address
-    to: `process.env.MAILTO`, // list of receivers separated by comma
+    from: `${process.env.MAILID}`, // sender address
+    to: `${process.env.MAILTO}`, // list of receivers separated by comma
     subject: 'Price Alert!', // Subject line
     text: 'Hello world?', // plain text body
     html: '<b>Hello world?</b>' // html body
@@ -40,10 +40,10 @@ function sendPriceAlerts(txtMsg,htmlMsg) {
     try {
         transporter.sendMail(mailOptions, (error, info) => {
             if (error) {
-                console.log(error);
-                res.status(400).send({success: false})
+                console.log(error);                
             } else {
-                res.status(200).send({success: true});
+                console.log("mail sent");
+                
             }
         });
     } catch(err) {
@@ -51,8 +51,6 @@ function sendPriceAlerts(txtMsg,htmlMsg) {
     }
     
 }
-
-
 
 function logToFile( message, file='server.log') {
     var now = new Date();   
@@ -145,7 +143,14 @@ async function check(url) {
             price = await page.$eval('.course-price-text > span + span > span', e => e.innerText);                        
             console.log(`${date}, ${time}=>${price}`);
             
-            let htmlMsg = `The price for the <a href="${url}'">course</a> at ${now} is ${price} ` ;
+            let htmlMsg = `Hi, <br> The price for the course that you were looking for has changed. <br>
+                <a href="${url}'"><img src="cid:price-${now.getDate()}-${time}.png}" alt=${url}> </a>.
+                 Updated Price at ${now} is <b>${price}</b> ` ;
+            mailOptions.attachments = [ {  filename: `price-${now.getDate()}-${time}.png`,
+                                        path: __dirname + `/screenshots/price-${now.getDate()}-${time}.png`,
+                                        cid: `price-${now.getDate()}-${time}.png}` 
+                                        }
+                                      ];          
             sendPriceAlerts(htmlMsg);
            
             logToFile(`Price: ${price}`);
