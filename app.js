@@ -6,14 +6,15 @@ const pluginStealth = require('puppeteer-extra-plugin-stealth');
 const bodyParser = require("body-parser");
 const {TimeoutError} = require('puppeteer/Errors');
 const nodeMailer = require('nodemailer');
+const path = require('path');
+const EmailTemplate = require('email-templates');
+
 const port= process.env.PORT|| 3000;
-const EmailTemplate = require('email-templates').EmailTemplate;
 var app = express();
 
 app.set('view engine','ejs');
 app.use(bodyParser.urlencoded({extended:true}));
 puppeteer.use(pluginStealth());
-
 
 /* Email setup */
 let transporter = nodeMailer.createTransport({
@@ -31,25 +32,55 @@ let mailOptions = {
     to: `${process.env.MAILTO}`, // list of receivers separated by comma
     subject: 'Price Alert!', // Subject line
     text: 'Hello world?', // plain text body
-    html: '<b>Hello world?</b>' // html body
+    html: '<b>Hello world?</b>', // html body
+    dsn: {
+        id: 'Message4MailPr1ce!1!', // is the envelope identifier that would be included in the response (ENVID)
+        return: 'headers', //is either ‘headers’ or ‘full’. It specifies if only headers or the entire body of the message should be included in the response (RET)
+        notify: 'success', //Possible values are ‘never’, ‘success’, ‘failure’ and ‘delay’.
+        recipient: `${process.env.MAILID}`
+    }
 };
 
-function sendPriceAlerts(txtMsg,htmlMsg) {
-    mailOptions.text = txtMsg;
-    mailOptions.html = htmlMsg;
-    try {
-        transporter.sendMail(mailOptions, (error, info) => {
-            if (error) {
-                console.log(error);                
-            } else {
-                console.log("mail sent");
-                
-            }
-        });
-    } catch(err) {
-        logToFile("Email not sent");
-    }
+function sendPriceAlerts(url,date, time, price, screenshotName) {
     
+    const templatePath = path.join(__dirname,"mailTemplates");   
+    const screenshotPath = path.join(__dirname,"screenshots",screenshotName);    
+    const email  = new EmailTemplate({
+        transport: transporter,
+        send: true,
+        preview : false,
+        views: {
+            options : {
+                extension : 'ejs',
+            },
+            root : templatePath,
+        }
+    });
+    const cid =   `${Date.now()}`;
+    console.log("cid",cid);
+    let locals = {
+        userName : process.env.MAILTOUSER || "",
+        url : url,
+        cid : cid,
+        time : time,
+        date : date,
+        price: price,        
+    };
+    
+    let attachments = [ {   filename: screenshotName,
+                            path: screenshotPath,
+                            contentType : 'image/png',
+                            cid: cid
+                        }
+                    ];   
+    mailOptions.attachments = attachments;                  
+    email.send({
+        template: 'showPrice',
+        message : mailOptions,
+        locals: locals,
+    }).then(() => {console.log('email has been send!');logToFile("Mail is sent!!")})
+      .catch(logToFile);            
+
 }
 
 function logToFile( message, file='server.log') {
@@ -63,153 +94,80 @@ function logToFile( message, file='server.log') {
     });
 }
 
-app.get("/pricing",(req,res)=> {
-    let date, time, price;
-    const url = 'https://www.udemy.com/the-web-developer-bootcamp/';
-    puppeteer.launch({ headless: true }).then(async browser => {
+async function run(url) {
+   
+    const browser =  await puppeteer.launch({ headless: true, ignoreHTTPSErrors: true, slowMo:300});
+    const interval = setInterval(async () => {
+        console.log("interval called");
         const page = await browser.newPage();
         await page.setViewport({ width: 800, height: 600 });
-        await page.goto(url, { timeout: 120000, waitUntil: 'networkidle0' })
-            .catch(e => {
-              console.log('Oops! some error occured');
-            browser.close();
-        });    
-        
-        await page.waitFor(5000)
-        //await page.screenshot({ path: 'testresult.png', fullPage: true })
-        await page.waitForSelector('.course-price-text > span + span > span');
-        const now= new Date();
-        try{
-            price = await page.$eval('.course-price-text > span + span > span', e => e.innerText);
-        }catch(err) {
-            console.log("taking lots of time");
-        }
-        
-        console.log(price);
-        await browser.close();                 
-        date = `${now.getDate()}-${now.getMonth()+1}-${now.getYear()}`;
-        time = `${now.getHours()}:${now.getMinutes()}`;
-        let log = `${date} at ${time}, Price is ${price}`;
-        console.log(log);
-        fs.appendFile('server.log',log+'\n',(err)=>{
-            if(err)
-                {console.log(err);}
-        });
-        
-      });
-    res.render("display",{date,time,price});
-});
+        page.setDefaultTimeout(20000);
+        await new Promise( async (resolve,reject) => { 
+        try {       
+                await page.goto(url,{waitUntil: 'load'}); //consider navigation to be finished when the load event is fired.
+                let now = new Date();  
+                let date = `${now.getDate()}-${now.getMonth()}-${now.getFullYear()}`;          
+                let time = `${now.getHours()}hh ${now.getMinutes()}mm`;
+                let selector = `.course-price-text > span + span > span`;
+                let screenshotName = `price-${now.getDate()}-${time}.png`;
+                try {
+                    await page.screenshot({ path: `./screenshots/${screenshotName}`, fullPage: true });                    
+                    try {
+                        await page.waitFor(500);
+                        await page.waitForSelector(selector,{timeout:5000});
+                    } catch(e) {
+                        if (e instanceof TimeoutError) {
+                            await page.waitFor(2000);
+                            await page.waitForSelector(selector,{timeout:4000});
+                            }
+                    }                
+                } catch(err) {
+                    console.log("error in taking screenshot.."+err);
+                    logToFile("Screenshot Error: "+err);
+                } finally {
+                    logToFile("Screenshot taken");
+                }
 
-
-async function check(url) {
-    process.on("uncaughtException", (e) => {
-        console.error("Unhandled exeption:", e);
-        process.exit(6);
-        });
-        process.on("unhandledRejection", (reason, p) => {
-        console.error("Unhandled Rejection at: Promise", p, "reason:", reason);
-        // application specific logging, throwing an error, or other logic here
-        // cont = false;
-        });  
-    const browser = await puppeteer.launch({ headless: true,ignoreHTTPSErrors: true, slowMo:800 });
-    const page = await browser.newPage();
-    await page.setViewport({ width: 800, height: 600 });
-    await new Promise( async (resolve,reject) => { 
-    try { 
-            await page.goto(url,{waitUntil: 'domcontentloaded'});
-            let now = new Date();  
-            let date = `${now.getDate()} -${now.getMonth()+1}-${now.getYear()}`;          
-            let time = `${now.getHours()}hh ${now.getMinutes()}mm`;
-            try {
-                await page.screenshot({ path: `./screenshots/price-${now.getDate()}-${time}.png`, fullPage: true });
+                try{
+                    price = await page.$eval(selector, e => e.innerText);                        
+                    console.log(`${date}, ${time}=>${price}`);
+                } catch(err) {
+                    await page.waitFor(1000);
+                    price = await page.$eval(selector, e => e.innerText);  
+                } finally {
+                    logToFile(`Price is ${price}`);
+                }                
+                    
+                sendPriceAlerts(url,date, time, price, screenshotName);       
                 
             } catch(err){
-                console.log("error in screenshot.."+err);
-                logToFile("Error: "+err);
-            }
-           console.log("After screenshot");
-           // await Promise.race([page.screenshot({ path: `./screenshots/price-${now.getDate()}-${time}.png`, fullPage: true }), 
-          // new Promise((resolve, reject) => setTimeout(reject, 2000))]);
-            try {
-                await page.waitFor(500);
-                await page.waitForSelector('.course-price-text > span + span > span',{timeout:5000});
-            } catch(e) {
-                if (e instanceof TimeoutError) {
-                    await page.waitFor(1000);
-                    await page.waitForSelector('.course-price-text > span + span > span',{timeout:4000});
-                    }
-            }        
-            
-            price = await page.$eval('.course-price-text > span + span > span', e => e.innerText);                        
-            console.log(`${date}, ${time}=>${price}`);
-            
-            let htmlMsg = `Hi, <br> The price for the course that you were looking for has changed. <br>
-                <a href="${url}'"><img src="cid:price-${now.getDate()}-${time}.png}" alt=${url}> </a>.
-                 Updated Price at ${now} is <b>${price}</b> ` ;
-            mailOptions.attachments = [ {  filename: `price-${now.getDate()}-${time}.png`,
-                                        path: __dirname + `/screenshots/price-${now.getDate()}-${time}.png`,
-                                        cid: `price-${now.getDate()}-${time}.png}` 
-                                        }
-                                      ];          
-            sendPriceAlerts(htmlMsg);
-           
-            logToFile(`Price: ${price}`);
-        } catch(err){
-            console.log(err);            
-            browser.close();           
-        }
-                
-    }); //new Promise ends   
-    browser.close();
-    
-    res.render("index",{date,time,price});
+                console.log(err);            
+                page.close();           
+            } finally {
+                if(!page.isClosed()) {
+                    page.close();
+                }
+            }     
+        
+    }); //new Promise ends  
+        browser.close();
+        
+        res.render("index",{date,time,price});
+    },120000);
 }
 
-app.post("/pricing",(req,res)=>{
-    var url = req.body.url;
-    let date, time, price;
+app.post("/pricing",(req,res)=> {
+    var url = req.body.url;   
     if(!url){
         throw "Please provide URL";
     } else {
         console.log("url is "+url);
-    }    
-
-    /* puppeteer.launch({ headless: true }).then(async browser => {
-        const page = await browser.newPage();
-        await page.setViewport({ width: 800, height: 600 });
-        await page.goto(url, { timeout: 120000, waitUntil: 'networkidle0' })
-            .catch(e => {
-              console.log('Oops! some error occured');
-            browser.close();
-        });    
-        
-        await page.waitFor(5000)
-        //await page.screenshot({ path: 'testresult.png', fullPage: true })
-        await page.waitForSelector('.course-price-text > span + span > span');
-        
-        const now= new Date();
-        price = await page.$eval('.course-price-text > span + span > span', e => e.innerText);
-        console.log(price);
-        await browser.close();                 
-        date = `${now.getDate()}-${now.getMonth()+1}-${now.getYear()}`;
-        time = `${now.getHours()}:${now.getMinutes()}`;
-        let log = `${date} at ${time}, Price is ${price}`;
-        console.log(log);
-        fs.appendFile('server.log',log+'\n',(err)=>{
-            if(err)
-                {console.log(err);}
-        });
-        
-      }); */
-      try{
-            const interval = setInterval(async () => {
-            check(url);
-        },120000); //2 min
-      } catch{
-          res.send("Taking much time!!");
-      }
-      
-    //res.send("posting "+url+ "price: "+price);
+    }        
+    try{            
+        run(url);
+      } catch(err){
+          res.send("Taking much time!!"+err);
+      } 
 });
 
 app.get("/",(req,res)=>{    

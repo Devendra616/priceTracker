@@ -1,0 +1,27 @@
+<html>
+
+	<head>
+	</head>
+	<body>
+		<div style="margin:0 auto;max-width:600px;">
+			<p>Hi <%= userName %>,</br>
+            <blockquote>
+                    The price for the course that you were looking for has changed. <br>
+                    <a href='<%= url %>'> <img src='cid:<%= cid %>' alt='<%= url %>' style="width:250px;height: 300px;object-position: 100% 0; object-fit: cover;" > </a> <br><br>
+                    Updated price on <%= date %>,<%= time %> is <b> Rs. <%= price %></b>                
+            </blockquote>  
+        </br></br>
+        <div style="
+            width: 320px; 
+            height: 150px; 
+            background-image: url('cid:<%= cid %>');
+            ">
+        </div>
+        <pre style="text-align: left">
+        Thanks & Regards,
+        Team Udemy
+        India
+        </pre>
+		</div>
+	</body>
+</html>
