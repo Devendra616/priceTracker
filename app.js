@@ -153,7 +153,7 @@ async function run(url) {
         browser.close();
         
         res.render("index",{date,time,price});
-    },120000);
+    },3600000); //1hr
 }
 
 app.post("/pricing",(req,res)=> {
